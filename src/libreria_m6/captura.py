@@ -1,5 +1,8 @@
+"""Captura de datos por consola: aquí viven los input() del programa."""
+
 from typing import Any
 
+from libreria_m6.catalogo import filtrar_libros
 from libreria_m6.modelos import Libreria, Libro
 
 
@@ -66,40 +69,6 @@ def capturar_libro(data: Libreria) -> dict[str, Any]:
         "cantidad_disponible": cantidad,
         "editorial": editorial,
     }
-
-
-def filtrar_libros(
-    data: Libreria,
-    autor: str | None = None,
-    genero: str | None = None,
-    en_stock: bool | None = None,
-    precio_max: float | None = None,
-    año_min: int | None = None,
-) -> list[Libro]:
-    """Filtra el catálogo de libros según los criterios indicados.
-
-    Cualquier parámetro que se deje en None se ignora (no filtra por ese campo).
-    """
-    resultado = data["libros"]
-
-    if autor is not None:
-        resultado = [libro for libro in resultado if autor.lower() in libro.autor.nombre.lower()]
-
-    if genero is not None:
-        resultado = [
-            libro for libro in resultado if any(genero.lower() in g.lower() for g in libro.genero)
-        ]
-
-    if en_stock is not None:
-        resultado = [libro for libro in resultado if libro.en_stock == en_stock]
-
-    if precio_max is not None:
-        resultado = [libro for libro in resultado if libro.precio <= precio_max]
-
-    if año_min is not None:
-        resultado = [libro for libro in resultado if libro.año_publicacion >= año_min]
-
-    return resultado
 
 
 def capturar_filtros(data: Libreria) -> list[Libro]:

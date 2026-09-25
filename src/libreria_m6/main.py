@@ -1,18 +1,16 @@
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Final
 
+from libreria_m6.almacenamiento import cargar_datos, guardar_datos
 from libreria_m6.captura import capturar_filtros, capturar_libro
+from libreria_m6.catalogo import agregar_libro
 from libreria_m6.excepciones import LibreriaError
-from libreria_m6.lector import (
-    agregar_libro,
-    cargar_datos,
-    guardar_datos,
-    mostrar_libreria,
-    mostrar_libros,
-)
+from libreria_m6.intercambio import exportar_csv
 from libreria_m6.modelos import Libro
 from libreria_m6.utilidades import cronometro
+from libreria_m6.vista import mostrar_libreria, mostrar_libros
 
 
 def main() -> None:
@@ -52,6 +50,18 @@ def main() -> None:
         resultados = capturar_filtros(data)
         print(f"\n🔍 {len(resultados)} resultado(s) encontrado(s):")
         mostrar_libros(resultados)
+
+        if resultados:
+            respuesta_csv = input("\n¿Deseas exportar el resultado a CSV? (s/n): ")
+            if respuesta_csv.strip().lower() == "s":
+                nombre_defecto = f"filtro_{datetime.now():%Y%m%d_%H%M%S}"
+                nombre = input(f"Nombre del archivo [{nombre_defecto}]: ").strip()
+                ruta_csv = ruta_json.parent / "exportaciones" / (nombre or nombre_defecto)
+                try:
+                    ruta_final = exportar_csv(resultados, ruta_csv)
+                    print(f"\n✅ Resultado exportado a: {ruta_final}")
+                except LibreriaError as e:
+                    print(f"❌ No se pudo exportar: {e}")
 
     print("\n¡HASTA LUEGO!\n")
 
