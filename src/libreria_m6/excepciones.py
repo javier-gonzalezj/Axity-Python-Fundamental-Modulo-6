@@ -10,6 +10,10 @@ class ArchivoJSONInvalidoError(LibreriaError):
     """Se lanza cuando el archivo existe pero su contenido no es JSON válido."""
 
 
+class ArchivoCSVInvalidoError(LibreriaError):
+    """Se lanza cuando un archivo CSV no tiene las columnas esperadas o está dañado."""
+
+
 class PermisoArchivoError(LibreriaError):
     """Se lanza cuando no hay permisos para leer o escribir el archivo."""
 
