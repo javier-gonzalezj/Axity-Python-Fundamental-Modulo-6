@@ -77,13 +77,11 @@ def cronometro(etiqueta: str = "Bloque") -> Generator[None]:
         yield
     finally:
         duracion = time.perf_counter() - inicio
-        print(f"\n{etiqueta}: {duracion:.4f}s\n")
+        log.debug("%s: %.4fs", etiqueta, duracion)
 
 
 @contextmanager
-def escritura_atomica(
-    ruta: str | Path, encoding: str = "utf-8", newline: str | None = None
-) -> Generator[TextIO]:
+def escritura_atomica(ruta: str | Path, encoding: str = "utf-8") -> Generator[TextIO]:
     """Escribe en un archivo temporal y reemplaza `ruta` solo si todo salió bien.
 
     Si ocurre un error durante la escritura, el archivo original queda intacto.
@@ -91,7 +89,7 @@ def escritura_atomica(
     ruta = Path(ruta)
     fd, tmp = tempfile.mkstemp(dir=ruta.parent, suffix=".tmp")
     try:
-        with os.fdopen(fd, "w", encoding=encoding, newline=newline) as f:
+        with os.fdopen(fd, "w", encoding=encoding) as f:
             yield f
         _reemplazar(tmp, ruta)
     except BaseException:

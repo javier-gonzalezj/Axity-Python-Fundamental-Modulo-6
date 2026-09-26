@@ -1,6 +1,7 @@
 """Lectura y escritura del catálogo en el archivo JSON (persistencia)."""
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, cast
 
@@ -12,6 +13,8 @@ from libreria_m6.excepciones import (
 )
 from libreria_m6.modelos import Libreria, Libro
 from libreria_m6.utilidades import escritura_atomica
+
+log = logging.getLogger(__name__)
 
 
 def cargar_datos(ruta: str | Path) -> Libreria:
@@ -44,6 +47,9 @@ def cargar_datos(ruta: str | Path) -> Libreria:
     data["libros"] = [Libro.desde_dict(libro) for libro in data["libros"]]
     # cast no convierte nada: solo le asegura a mypy que, tras validar los libros,
     # el diccionario ya tiene la forma de Libreria.
+
+    log.info("Catálogo cargado desde %s: %d libros", ruta, len(data["libros"]))
+
     return cast(Libreria, data)
 
 
@@ -62,3 +68,5 @@ def guardar_datos(ruta: str | Path, data: Libreria) -> None:
         raise PermisoArchivoError(f"Sin permisos para escribir el archivo: {ruta}") from None
     except FileNotFoundError:
         raise ArchivoNoEncontradoError(f"No existe la carpeta de destino: {ruta.parent}") from None
+
+    log.info("Catálogo guardado en %s: %d libros", ruta, len(data["libros"]))

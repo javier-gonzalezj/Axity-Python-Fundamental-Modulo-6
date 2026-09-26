@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
@@ -7,18 +8,24 @@ from libreria_m6.almacenamiento import cargar_datos, guardar_datos
 from libreria_m6.captura import capturar_filtros, capturar_libro
 from libreria_m6.catalogo import agregar_libro
 from libreria_m6.excepciones import LibreriaError
-from libreria_m6.intercambio import exportar_csv
+from libreria_m6.intercambio import exportar_json
 from libreria_m6.modelos import Libro
+from libreria_m6.registro import configurar_logging
 from libreria_m6.utilidades import cronometro
 from libreria_m6.vista import mostrar_libreria, mostrar_libros
+
+log = logging.getLogger(__name__)
 
 
 def main() -> None:
     os.system("cls" if os.name == "nt" else "clear")
 
     LIBROS_POR_PAGINA: Final = 3
-    ruta_json = Path(__file__).parent.parent.parent / "data" / "libreria.json"
+    raiz_proyecto = Path(__file__).parent.parent.parent
+    ruta_json = raiz_proyecto / "data" / "libreria.json"
 
+    configurar_logging(raiz_proyecto / "logs")
+    log.info("Inicio del programa")
     print("\nSCRIPT DE MANEJO DE CATALOGO DE LIBROS (MODULO 6)\n")
 
     try:
@@ -27,6 +34,7 @@ def main() -> None:
             data = cargar_datos(ruta_json)
 
     except LibreriaError as e:
+        log.exception("Error al cargar el catálogo")
         print(f"❌ Error al cargar la librería: {e}")
         return
 
@@ -40,6 +48,7 @@ def main() -> None:
             with cronometro("Guardar catalogo"):
                 guardar_datos(ruta_json, data)
         except LibreriaError as e:
+            log.exception("Error al agregar un libro")
             print(f"❌ No se pudo agregar el libro: {e}")
             return
         print(f"\n✅ '{nuevo_libro.titulo}' agregado correctamente.")
@@ -52,17 +61,19 @@ def main() -> None:
         mostrar_libros(resultados)
 
         if resultados:
-            respuesta_csv = input("\n¿Deseas exportar el resultado a CSV? (s/n): ")
-            if respuesta_csv.strip().lower() == "s":
+            respuesta_exportar = input("\n¿Deseas exportar el resultado a JSON? (s/n): ")
+            if respuesta_exportar.strip().lower() == "s":
                 nombre_defecto = f"filtro_{datetime.now():%Y%m%d_%H%M%S}"
                 nombre = input(f"Nombre del archivo [{nombre_defecto}]: ").strip()
-                ruta_csv = ruta_json.parent / "exportaciones" / (nombre or nombre_defecto)
+                ruta_exportacion = ruta_json.parent / "exportaciones" / (nombre or nombre_defecto)
                 try:
-                    ruta_final = exportar_csv(resultados, ruta_csv)
+                    ruta_final = exportar_json(resultados, ruta_exportacion)
                     print(f"\n✅ Resultado exportado a: {ruta_final}")
                 except LibreriaError as e:
+                    log.exception("Error al exportar el archivo")
                     print(f"❌ No se pudo exportar: {e}")
 
+    log.info("--- Fin del programa ---")
     print("\n¡HASTA LUEGO!\n")
 
 

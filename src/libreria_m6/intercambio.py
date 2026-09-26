@@ -1,10 +1,13 @@
 """Intercambio de libros con archivos externos (importar y exportar).
 
-Aquí van los formatos que no son el catálogo principal: por ahora, exportar a CSV.
-El JSON propio de la librería se maneja en almacenamiento.py.
+Aquí van los archivos que no son el catálogo principal: por ahora, exportar
+una selección de libros a JSON. El catálogo de la librería se maneja en
+almacenamiento.py.
 """
 
-import csv
+import json
+import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -12,53 +15,31 @@ from libreria_m6.excepciones import PermisoArchivoError
 from libreria_m6.modelos import Libro
 from libreria_m6.utilidades import escritura_atomica
 
-COLUMNAS_CSV = [
-    "isbn",
-    "titulo",
-    "autor",
-    "nacionalidad_autor",
-    "genero",
-    "año_publicacion",
-    "precio",
-    "en_stock",
-    "cantidad_disponible",
-    "editorial",
-]
+log = logging.getLogger(__name__)
 
 
-def _libro_a_fila(libro: Libro) -> dict[str, Any]:
-    """Aplana un Libro en una fila de CSV (solo valores simples, sin anidar)."""
-    return {
-        "isbn": libro.isbn,
-        "titulo": libro.titulo,
-        "autor": libro.autor.nombre,
-        "nacionalidad_autor": libro.autor.nacionalidad,
-        "genero": "; ".join(libro.genero),
-        "año_publicacion": libro.año_publicacion,
-        "precio": f"{libro.precio:.2f}",
-        "en_stock": "sí" if libro.en_stock else "no",
-        "cantidad_disponible": libro.cantidad_disponible,
-        "editorial": libro.editorial,
-    }
+def exportar_json(libros: list[Libro], ruta: str | Path) -> Path:
+    """Guarda una lista de libros en un archivo JSON y devuelve la ruta final.
 
-
-def exportar_csv(libros: list[Libro], ruta: str | Path) -> Path:
-    """Guarda una lista de libros en un archivo CSV y devuelve la ruta final.
-
-    Usa utf-8-sig para que Excel muestre bien los acentos y la ñ.
+    Los libros se guardan bajo la clave "libros", con la misma forma que en el
+    catálogo, para poder leerlos después con Libro.desde_dict.
     """
-    ruta = Path(ruta).with_suffix(".csv")
+    ruta = Path(ruta).with_suffix(".json")
     ruta.parent.mkdir(parents=True, exist_ok=True)
 
+    # Serialización: cada Libro se vuelve dict, igual que en guardar_datos
+    contenido: dict[str, Any] = {
+        "exportado": datetime.now().isoformat(timespec="seconds"),
+        "total": len(libros),
+        "libros": [libro.a_dict() for libro in sorted(libros)],
+    }
+
     try:
-        # newline="" es obligatorio con el módulo csv: evita líneas en blanco en Windows
-        with escritura_atomica(ruta, encoding="utf-8-sig", newline="") as f:
-            escritor = csv.DictWriter(f, fieldnames=COLUMNAS_CSV)
-            escritor.writeheader()
-            escritor.writerows(_libro_a_fila(libro) for libro in sorted(libros))
+        with escritura_atomica(ruta) as f:
+            json.dump(contenido, f, ensure_ascii=False, indent=2)
     except PermissionError:
-        raise PermisoArchivoError(
-            f"Sin permisos para escribir {ruta}. ¿Está abierto en Excel?"
-        ) from None
+        raise PermisoArchivoError(f"Sin permisos para escribir el archivo: {ruta}") from None
+
+    log.info("Exportados %d libros a %s", len(libros), ruta)
 
     return ruta

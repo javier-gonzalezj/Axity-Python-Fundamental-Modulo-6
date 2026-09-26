@@ -1,7 +1,11 @@
 """Reglas del catálogo: operaciones sobre los libros sin entrada/salida."""
 
+import logging
+
 from libreria_m6.excepciones import LibroInvalidoError
 from libreria_m6.modelos import Libreria, Libro
+
+log = logging.getLogger(__name__)
 
 
 def agregar_libro(data: Libreria, libro: Libro) -> Libreria:
@@ -14,6 +18,8 @@ def agregar_libro(data: Libreria, libro: Libro) -> Libreria:
         raise LibroInvalidoError(f"Ya existe un libro con ISBN {libro.isbn}")
 
     data["libros"].append(libro)
+    log.info("Libro agregado: %s (ISBN %s)", libro.titulo, libro.isbn)
+
     return data
 
 
@@ -29,6 +35,14 @@ def filtrar_libros(
 
     Cualquier parámetro que se deje en None se ignora (no filtra por ese campo).
     """
+    log.debug(
+        "Filtros: autor=%r genero=%r en_stock=%r precio_max=%r año_min=%r",
+        autor,
+        genero,
+        en_stock,
+        precio_max,
+        año_min,
+    )
     resultado = data["libros"]
 
     if autor is not None:
@@ -47,5 +61,7 @@ def filtrar_libros(
 
     if año_min is not None:
         resultado = [libro for libro in resultado if libro.año_publicacion >= año_min]
+
+    log.debug("Filtrado: %d de %d libros", len(resultado), len(data["libros"]))
 
     return resultado
