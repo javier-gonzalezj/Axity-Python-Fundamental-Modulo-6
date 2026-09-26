@@ -8,7 +8,7 @@ from libreria_m6.almacenamiento import cargar_datos, guardar_datos
 from libreria_m6.captura import capturar_filtros, capturar_libro
 from libreria_m6.catalogo import agregar_libro
 from libreria_m6.excepciones import LibreriaError
-from libreria_m6.intercambio import ResultadoImportacion, exportar_json, importar_csv
+from libreria_m6.intercambio import exportar_json, importar_csv
 from libreria_m6.modelos import Libreria, Libro
 from libreria_m6.registro import configurar_logging
 from libreria_m6.utilidades import cronometro
@@ -16,45 +16,113 @@ from libreria_m6.vista import mostrar_libreria, mostrar_libros
 
 log = logging.getLogger(__name__)
 
+LIBROS_POR_PAGINA: Final = 3
 
-def _importar_desde_csv(data: Libreria) -> ResultadoImportacion | None:
-    """Pide la ruta de un CSV, importa sus libros a `data` y muestra el resumen.
+MENU: Final = """
+═════════════ MENÚ ═════════════
+  1. Filtrar libros
+  2. Cargar archivo CSV
+  3. Agregar un libro
+  4. Ver catálogo completo
+  0. Salir
+════════════════════════════════"""
 
-    Devuelve None si el archivo no se pudo leer. No guarda el catálogo.
-    """
+
+def _opcion_importar_csv(data: Libreria, ruta_json: Path) -> None:
+    """2. Agrega al catálogo los libros de un archivo CSV y guarda."""
     # "Copiar como ruta" en Windows agrega comillas; se quitan
-    texto_ruta = input("Ruta del archivo CSV: ").strip().strip('"')
+    texto_ruta = input("\nRuta del archivo CSV: ").strip().strip('"')
+    respaldo = list(data["libros"])  # copia de la lista, por si falla el guardado
+
     try:
         resultado = importar_csv(data, texto_ruta)
     except LibreriaError as e:
         log.exception("Error al importar el archivo CSV")
         print(f"❌ No se pudo importar: {e}")
-        return None
+        return
 
-    print(f"\n✅ {len(resultado.agregados)} libro(s) agregado(s).")
     if resultado.rechazados:
-        print(f"⚠️  {len(resultado.rechazados)} fila(s) rechazada(s):")
+        print(f"\n⚠️  {len(resultado.rechazados)} fila(s) rechazada(s):")
         for motivo in resultado.rechazados:
             print("   - " + motivo.replace("\n", "\n     "))
-    return resultado
+
+    if not resultado.agregados:
+        print("\nNo se agregó ningún libro.")
+    elif _guardar(ruta_json, data, respaldo):
+        print(f"\n✅ {len(resultado.agregados)} libro(s) agregado(s).")
+
+
+def _guardar(ruta_json: Path, data: Libreria, respaldo: list[Libro]) -> bool:
+    """Guarda el catálogo. Si falla, deshace los cambios en memoria.
+
+    `respaldo` es la lista de libros tal como estaba antes de modificarla.
+    Devuelve True si se guardó.
+    """
+    try:
+        with cronometro("Guardar catalogo"):
+            guardar_datos(ruta_json, data)
+    except LibreriaError as e:
+        log.exception("Error al guardar el catálogo")
+        data["libros"] = respaldo  # memoria y disco vuelven a coincidir
+        print(f"❌ No se pudo guardar el catálogo, se descartaron los cambios: {e}")
+        return False
+    return True
+
+
+def _opcion_filtrar(data: Libreria, carpeta_exportaciones: Path) -> None:
+    """1. Filtra el catálogo y ofrece exportar el resultado a JSON."""
+    resultados = capturar_filtros(data)
+    print(f"\n🔍 {len(resultados)} resultado(s) encontrado(s):")
+    mostrar_libros(resultados)
+
+    if not resultados:
+        return
+
+    respuesta = input("\n¿Deseas exportar el resultado a JSON? (s/n): ").strip().lower()
+    if respuesta != "s":
+        return
+
+    nombre_defecto = f"filtro_{datetime.now():%Y%m%d_%H%M%S}"
+    nombre = input(f"Nombre del archivo [{nombre_defecto}]: ").strip()
+    try:
+        ruta_final = exportar_json(resultados, carpeta_exportaciones / (nombre or nombre_defecto))
+    except LibreriaError as e:
+        log.exception("Error al exportar el archivo JSON")
+        print(f"❌ No se pudo exportar: {e}")
+        return
+    print(f"\n✅ Resultado exportado a: {ruta_final}")
+
+
+def _opcion_agregar_libro(data: Libreria, ruta_json: Path) -> None:
+    """3. Captura un libro por consola, lo agrega y guarda."""
+    respaldo = list(data["libros"])
+    try:
+        nuevo_libro = Libro.desde_dict(capturar_libro(data))
+        agregar_libro(data, nuevo_libro)
+    except LibreriaError as e:
+        log.exception("Error al agregar un libro")
+        print(f"❌ No se pudo agregar el libro: {e}")
+        return
+
+    if _guardar(ruta_json, data, respaldo):
+        print(f"\n✅ '{nuevo_libro.titulo}' agregado correctamente.")
 
 
 def main() -> None:
     os.system("cls" if os.name == "nt" else "clear")
 
-    LIBROS_POR_PAGINA: Final = 3
     raiz_proyecto = Path(__file__).parent.parent.parent
     ruta_json = raiz_proyecto / "data" / "libreria.json"
+    carpeta_exportaciones = ruta_json.parent / "exportaciones"
 
     configurar_logging(raiz_proyecto / "logs")
     log.info("Inicio del programa")
+
     print("\nSCRIPT DE MANEJO DE CATALOGO DE LIBROS (MODULO 6)\n")
 
     try:
         with cronometro("Cargar catálogo"):
-            # Se incluye el context manager de temporizacion
             data = cargar_datos(ruta_json)
-
     except LibreriaError as e:
         log.exception("Error al cargar el catálogo")
         print(f"❌ Error al cargar la librería: {e}")
@@ -62,53 +130,26 @@ def main() -> None:
 
     mostrar_libreria(data, por_pagina=LIBROS_POR_PAGINA)
 
-    respuesta = input("\n¿Deseas agregar un nuevo libro? (s/n): ").strip().lower()
-    if respuesta == "s":
-        try:
-            nuevo_libro = Libro.desde_dict(capturar_libro(data))
-            data = agregar_libro(data, nuevo_libro)
-            with cronometro("Guardar catalogo"):
-                guardar_datos(ruta_json, data)
-        except LibreriaError as e:
-            log.exception("Error al agregar un libro")
-            print(f"❌ No se pudo agregar el libro: {e}")
-            return
-        print(f"\n✅ '{nuevo_libro.titulo}' agregado correctamente.")
-        mostrar_libreria(data, por_pagina=LIBROS_POR_PAGINA)
+    while True:
+        print(MENU)
+        opcion = input("Elige una opción: ").strip()
+        log.debug("Opción elegida: %r", opcion)
 
-    respuesta_importar = input("\n¿Deseas importar libros desde un CSV? (s/n): ").strip().lower()
-    if respuesta_importar == "s":
-        resultado = _importar_desde_csv(data)
-        if resultado is not None and resultado.agregados:
-            try:
-                with cronometro("Guardar catalogo"):
-                    guardar_datos(ruta_json, data)
-            except LibreriaError as e:
-                log.exception("Error al guardar los libros importados")
-                print(f"❌ No se pudo guardar el catálogo: {e}")
-                return
-            mostrar_libreria(data, por_pagina=LIBROS_POR_PAGINA)
+        match opcion:
+            case "1":
+                _opcion_filtrar(data, carpeta_exportaciones)
+            case "2":
+                _opcion_importar_csv(data, ruta_json)
+            case "3":
+                _opcion_agregar_libro(data, ruta_json)
+            case "4":
+                mostrar_libreria(data, por_pagina=LIBROS_POR_PAGINA)
+            case "0":
+                break
+            case _:
+                print("⚠️  Opción no válida, elige un número del menú.")
 
-    respuesta_filtro = input("\n¿Deseas filtrar el catálogo? (s/n): ").strip().lower()
-    if respuesta_filtro == "s":
-        resultados = capturar_filtros(data)
-        print(f"\n🔍 {len(resultados)} resultado(s) encontrado(s):")
-        mostrar_libros(resultados)
-
-        if resultados:
-            respuesta_exportar = input("\n¿Deseas exportar el resultado a JSON? (s/n): ")
-            if respuesta_exportar.strip().lower() == "s":
-                nombre_defecto = f"filtro_{datetime.now():%Y%m%d_%H%M%S}"
-                nombre = input(f"Nombre del archivo [{nombre_defecto}]: ").strip()
-                ruta_exportacion = ruta_json.parent / "exportaciones" / (nombre or nombre_defecto)
-                try:
-                    ruta_final = exportar_json(resultados, ruta_exportacion)
-                    print(f"\n✅ Resultado exportado a: {ruta_final}")
-                except LibreriaError as e:
-                    log.exception("Error al exportar el archivo JSON")
-                    print(f"❌ No se pudo exportar: {e}")
-
-    log.info("--- Fin del programa ---")
+    log.info("Fin del programa")
     print("\n¡HASTA LUEGO!\n")
 
 
